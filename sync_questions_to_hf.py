@@ -24,14 +24,16 @@ from datasets import load_dataset
 from huggingface_hub import create_repo, upload_file, login
 from dotenv import load_dotenv
 
+from canary import CANARY
+
 # Load environment variables
 load_dotenv()
 
 # Configuration
-GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vR_fCnBetwXyIvAVaBJ1Surc6rdzoZm-eR9fdGWni9KvrwetKTpJRfSkyVF7PUfxBNGeI-dGEZp3P7u/pub?output=csv"
+GOOGLE_SHEETS_URL = "https://docs.google.com/spreadsheets/d/1Jwlsthh_6JuKpss8KiStz0QRpKlBeu5LW4PjyYS4wjg/export?format=csv&gid=496350054"
 LOCAL_CSV = "dataset/manta_questions.csv"
 HF_CSV = "manta_questions.csv"  # filename as stored in the HF repo
-HF_DATASET = "mycelium-ai/manta-questions"
+HF_DATASET = "mycelium-ai/manta-benchmark-questions"
 
 def get_existing_ids():
     """Read question IDs from the current local CSV before overwriting it."""
@@ -93,6 +95,28 @@ def download_from_google_sheets():
         print(f"❌ Download failed: {e}")
         return False
 
+def inject_canary():
+    """Append a canary column to every CSV row so all published copies carry it."""
+    with open(LOCAL_CSV, 'r', newline='', encoding='utf-8') as f:
+        rows = list(csv.reader(f))
+    if not rows:
+        print("❌ Error: CSV is empty, skipping canary injection")
+        return False
+    header, data = rows[0], rows[1:]
+    if 'canary' not in header:
+        header.append('canary')
+    canary_idx = header.index('canary')
+    for row in data:
+        while len(row) <= canary_idx:
+            row.append('')
+        row[canary_idx] = CANARY
+    with open(LOCAL_CSV, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.writer(f)
+        writer.writerow(header)
+        writer.writerows(data)
+    print(f"✅ Injected canary string into {len(data)} rows")
+    return True
+
 def upload_to_huggingface():
     """Upload CSV to HuggingFace dataset."""
 
@@ -127,6 +151,20 @@ def upload_to_huggingface():
             commit_message="Sync from Google Sheets"
         )
 
+        # Upload dataset card with canary so the HF repo page carries it too
+        readme = (
+            f"# MANTA Benchmark Questions\n\n"
+            f"Multi-turn Assessment for Nonhuman Thinking & Alignment — question dataset.\n\n"
+            f"{CANARY}\n"
+        )
+        upload_file(
+            path_or_fileobj=readme.encode('utf-8'),
+            path_in_repo="README.md",
+            repo_id=HF_DATASET,
+            repo_type="dataset",
+            commit_message="Update dataset card"
+        )
+
         print(f"✅ Successfully uploaded to https://huggingface.co/datasets/{HF_DATASET}")
 
         # Verify
@@ -150,6 +188,10 @@ def main():
 
     # Step 1: Download from Google Sheets
     if not download_from_google_sheets():
+        return
+
+    # Step 1b: Inject canary string into the CSV
+    if not inject_canary():
         return
 
     # Step 2: Upload to HuggingFace
