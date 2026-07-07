@@ -403,24 +403,14 @@ def manta_agentic_5turn():
 
 
 MODELS = [
-    "openrouter/anthropic/claude-opus-4-7",
-    "openrouter/openai/gpt-5.5",
-    "google/gemini-3.1-flash-lite-preview",
+    "anthropic/claude-opus-4-7",
+    "openai/gpt-5.5",
+    "google/gemini-3.5-flash",
     "grok/grok-4.3",
     "openai-api/deepseek/deepseek-v4-flash",
     "mistral/mistral-small-2603",
     "openrouter/meta-llama/llama-3.3-70b-instruct"
 ]
-# MODELS = [
-#     "google/gemini-3.1-flash-lite-preview",
-#     "anthropic/claude-opus-4-7",
-#     "anthropic/claude-sonnet-4-6",
-#     "openai/gpt-5.5",
-#     "grok/grok-4.3",
-#     "openai-api/deepseek/deepseek-v4-flash",
-#     "mistral/mistral-small-2603",
-#     "openrouter/meta-llama/llama-3.3-70b-instruct"
-# ]
 
 
 def validate_environment(models: list[str]) -> None:
@@ -446,9 +436,15 @@ def validate_environment(models: list[str]) -> None:
         missing.append("OPENROUTER_API_KEY")
     if any(model.startswith("grok/") for model in models) and not os.environ.get("XAI_API_KEY") and not os.environ.get("GROK_API_KEY"):
         missing.append("XAI_API_KEY or GROK_API_KEY")
-    # Follow-up generation and scorer panel route through OpenRouter.
-    if not os.environ.get("OPENROUTER_API_KEY"):
-        missing.append("OPENROUTER_API_KEY")
+    # Internal models hit provider APIs directly: follow-up writer (Haiku) and
+    # Anthropic judges need ANTHROPIC_API_KEY; the judge panel / AWMS fallback
+    # judge need OPENAI_API_KEY; the Gemini panel judge needs a Google key.
+    if not os.environ.get("ANTHROPIC_API_KEY"):
+        missing.append("ANTHROPIC_API_KEY")
+    if not os.environ.get("OPENAI_API_KEY"):
+        missing.append("OPENAI_API_KEY")
+    if not os.environ.get("GOOGLE_API_KEY") and not os.environ.get("GEMINI_API_KEY"):
+        missing.append("GOOGLE_API_KEY or GEMINI_API_KEY")
 
     missing = list(dict.fromkeys(missing))
     if missing:
